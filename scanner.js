@@ -56,8 +56,8 @@ server.on("message", function (msg, rinfo) {
     options.headers = {
         "Content-Type":"application/x-www-form-urlencoded"
       };
-   
-      
+    console.log("+++++++++++++DEVICE FOUND++++++++++++++++");  
+    console.log(tokens);      
     http.get(options,desc);
   }
 });
