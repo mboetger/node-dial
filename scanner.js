@@ -2,6 +2,7 @@ var dgram = require('dgram');
 var http = require('http');
 var url = require('url');
 var xml2js = require('xml2js');
+var argv = require('optimist').argv;
 
 var BROADCAST_PORT = 1900;
 var BROADCAST_IP = "239.255.255.250";
@@ -14,12 +15,50 @@ var message = new Buffer(SEARCH_MSG);
 
 var server = dgram.createSocket("udp4");
 
+var app = argv.a;
+var friendlyName = argv.f;
+
+
 server.on("error", function (err) {
   console.log("server error:\n" + err.stack);
   server.close();
 });
 
-var desc = function(res) {
+var appAvail = function(tokens, location, services, appUrl, res) {
+  var content = "";
+  res.setEncoding('utf8');
+  res.on('data', function(chunk) {
+    content += chunk;
+  });
+
+  res.on('end', function() {
+    try {
+      xml2js.parseString(content, function(err, appInfo) {
+
+        console.log('\n');
+        console.log('Incoming UDP Message :\n%j', tokens); 
+        console.log('\n');
+        console.log('********* Requesting Service Information From %j **********', location);
+        console.log('\n');
+        console.log('HTTP Response:\n%j', services); 
+        console.log('\n');
+        console.log('********* Requesting App Information From %j **********', appUrl);
+        console.log('\n');
+        if (!appInfo) {
+          console.log('App Not Available\n'); 
+        } else {
+          console.log('HTTP Response:\n%j', appInfo); 
+        }
+        console.log('\n');
+        console.log('***************************************************************************************');
+      });
+    } catch (ex) {
+	//no bueno
+    }
+  });
+}
+
+var desc = function(tokens, location, res) {
   var content = "";
   res.setEncoding('utf8');
   res.on('data', function(chunk) {
@@ -29,13 +68,42 @@ var desc = function(res) {
   res.on('end', function() {
     try {
       xml2js.parseString(content, function(err, services) {
-        console.log('Devices:\n%j', services.root.device); 
+        var displayInfo = true;
+        if (friendlyName != null) {
+          var nameRegEx = new RegExp(friendlyName, 'i');
+          displayInfo = services.root.device[0].friendlyName[0].match(nameRegEx);
+        }
+        if (displayInfo) {
+          if (app) {
+            var appUrl = res.headers['application-url'];
+            if (appUrl.slice(-1) != '/') {
+              appUrl += '/';
+            }
+            appUrl += app;
+            var options = url.parse(appUrl);
+            
+            options.headers = {
+                "Content-Type":"application/x-www-form-urlencoded"
+              };
+            http.get(options,appAvail.bind(this, tokens, location, services, url.format(options)));
+          } else {
+            console.log('\n');
+            console.log('Incoming UDP Message :\n%j', tokens); 
+            console.log('\n');
+            console.log('********* Requesting Service Information From %j **********', location);
+            console.log('\n');
+            console.log('HTTP Response:\n%j', services); 
+            console.log('\n');
+            console.log('***************************************************************************************');
+          }
+        }
       });
     } catch (ex) {
 	//no bueno
     }
   });
 }
+
 
 server.on("message", function (msg, rinfo) {
   var tokens = new String(msg).split('\n');
@@ -56,23 +124,28 @@ server.on("message", function (msg, rinfo) {
     options.headers = {
         "Content-Type":"application/x-www-form-urlencoded"
       };
-    console.log("+++++++++++++DEVICE FOUND++++++++++++++++");  
-    console.log(tokens);      
-    http.get(options,desc);
+    http.get(options,desc.bind(this, tokens, location));
   }
 });
 
 
 server.on("listening", function () {
   var address = server.address();
-  console.log("server listening " +
+  if (app) { 
+    console.log("Looking for %j", app);
+  }
+  if (friendlyName) {
+    console.log("Looking for device %j", friendlyName);
+  }
+  console.log("Server Listening " +
       address.address + ":" + address.port);
+
+  console.log("Broadcasting on %s:%d", BROADCAST_IP, BROADCAST_PORT);
+  server.send(message, 0, message.length, BROADCAST_PORT, BROADCAST_IP, function(err, bytes) {
+    setTimeout(function() { server.close(); }, LISTENING_TIMEOUT);
+  });
 });
 
 server.bind();
-
-server.send(message, 0, message.length, BROADCAST_PORT, BROADCAST_IP, function(err, bytes) {
-  setTimeout(function() { server.close(); }, LISTENING_TIMEOUT);
-});
 
 
