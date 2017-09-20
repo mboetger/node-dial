@@ -17,6 +17,7 @@ var server = dgram.createSocket("udp4");
 
 var app = argv.a;
 var friendlyName = argv.f;
+var ip = argv.i;
 
 
 server.on("error", function (err) {
@@ -120,6 +121,13 @@ server.on("message", function (msg, rinfo) {
   }
 
   if (location.length > 0 && targetMatches) {
+
+    if (ip != null) {
+      var ipRegEx = new RegExp(ip, 'i');
+      if (!location.match(ipRegEx)) {
+        return;
+      }
+    }
     var options = url.parse(location);
     options.headers = {
         "Content-Type":"application/x-www-form-urlencoded"
@@ -136,6 +144,9 @@ server.on("listening", function () {
   }
   if (friendlyName) {
     console.log("Looking for device %j", friendlyName);
+  }
+  if (ip) {
+    console.log("Looking for IP Address: %j", ip);
   }
   console.log("Server Listening " +
       address.address + ":" + address.port);
